@@ -11,11 +11,14 @@ class Simulation:
         self.num = num #number of particles
         self.S_WIDTH = 1000 #simulation width
         self.S_HEIGHT = 800 #simulation height
+        self.WIDTH = 1300
+        self.HEIGHT = 800
         self.FPS = 40
+        self.sim_speed = 1
         self.rgb_colors = {"blue" : (0,0,255), "red" : (255,0,0), "green" : (0,255,0),
                            "yellow" : (255,255,50), "purple":(191, 64, 191)}
         self.colors_speed = {"blue" : 10, "red" : 20, "green" : 30, "yellow":40, "purple":50}
-        self.WIN = pygame.display.set_mode((1200, 800))
+        self.WIN = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
         self.particles = []
         self.radius = radius
         self.colors = colors
@@ -68,7 +71,7 @@ class Simulation:
             if dist <= self.radius and x_l != 0 and y_l != 0:
                 moves = dist / self.colors_speed[par.color]
                 move = None
-                if dist <= 12:
+                if dist <= 20:
                     x_move = x_l / moves
                     y_move = y_l / moves
                     move = (x_move - x_move * 2, y_move - y_move * 2)
@@ -92,11 +95,15 @@ class Simulation:
                 x_sum += move[0]
                 y_sum += move[1]
             if in_radius:
-                moves = (x_sum / len(in_radius), y_sum / len(in_radius))
-                if 5 < par.x + moves[0] < self.S_WIDTH - 5:
-                    par.x += moves[0]
-                if 5 < par.y + moves[1] < self.S_HEIGHT - 5:
-                    par.y += moves[1]
+                moves = [x_sum / len(in_radius), y_sum / len(in_radius)]
+                if 5 < par.x + moves[0] * self.sim_speed < self.S_WIDTH - 5:
+                    par.x += moves[0] * self.sim_speed
+                else:
+                    par.x += (moves[0] * self.sim_speed) - (moves[0] * self.sim_speed) * 2
+                if 5 < par.y + moves[1] * self.sim_speed < self.S_HEIGHT - 5:
+                    par.y += moves[1] * self.sim_speed
+                else:
+                    par.y += (moves[1] * self.sim_speed) - (moves[1] * self.sim_speed) * 2
 
     def draw(self):
         self.WIN.fill((0,0,0))
@@ -105,12 +112,16 @@ class Simulation:
             pygame.draw.circle(self.WIN,self.rgb_colors[par.color], (par.x, par.y), 4)
 
         #menu
-        menu_bg = pygame.Rect(self.S_WIDTH, 0, 200, self.S_HEIGHT)
+        m_width = self.WIDTH - self.S_WIDTH
+        menu_bg = pygame.Rect(self.S_WIDTH, 0, m_width, self.HEIGHT)
         pygame.draw.rect(self.WIN, (200,200,200), menu_bg)
-        self.draw_text("1 - Draw On/Off", (255,0,0), 15,1100, 20, x_center= True)
-        self.draw_text("2 - Change color", (255,0,0), 15,1100, 50, x_center= True)
-        self.draw_text("3 - Start again", (255,0,0), 15,1100, 80, x_center= True)
-        self.draw_text("4 - Sandbox", (255,0,0), 15,1100, 110, x_center= True)
+        self.draw_text(f"Simulation speed: {self.sim_speed} | Particles: {len(self.particles)}",
+                       (255, 0, 0), 15, self.S_WIDTH + m_width / 2, 10, x_center=True)
+        self.draw_text("1 - Draw On/Off", (255,0,0), 15,self.S_WIDTH + m_width / 2, 40, x_center= True)
+        self.draw_text("2 - Change color", (255,0,0), 15,self.S_WIDTH + m_width / 2, 70, x_center= True)
+        self.draw_text("3 - Start again", (255,0,0), 15,self.S_WIDTH + m_width / 2, 100, x_center= True)
+        self.draw_text("4 - Sandbox", (255,0,0), 15,self.S_WIDTH + m_width / 2, 130, x_center= True)
+        self.draw_text("Arrows up/down simulation speed", (255,0,0), 15,self.S_WIDTH + m_width / 2, 160, x_center= True)
 
         pygame.display.update()
 
@@ -138,9 +149,17 @@ class Simulation:
                         color = self.colors[c_indx]
                     if event.key == pygame.K_3:
                         self.start()
+                        #start simulation again
                     if event.key == pygame.K_4:
                         self.WIN.fill((0,0,0))
                         self.particles = []
+                    if event.key == pygame.K_UP:
+                        self.sim_speed += 1
+                        #speed up
+                    if event.key == pygame.K_DOWN:
+                        self.sim_speed -= 1
+                        # if self.sim_speed != 0: self.sim_speed -= 1
+                        #i need to put a comment here so i can minimaze this if statment in IDE :)
                 if draw and event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.mouse.get_pos()
                     tmp = Particle(color, mouse_pos[0], mouse_pos[1],self.colors_speed[color])
