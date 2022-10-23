@@ -4,7 +4,7 @@ import pygame
 from particle import Particle
 
 class Simulation:
-    def __init__(self, num, colors, attracts, repulses,radius):
+    def __init__(self, num, colors,attracts, repulses,rules,radius, gravity = True):
         pygame.init()
         pygame.display.set_caption("Particle Simulation")
 
@@ -24,6 +24,7 @@ class Simulation:
         self.colors = colors
         self.attracts = attracts
         self.repulses = repulses
+        self.rules = rules
 
     def start(self):
         self.particles = []
@@ -71,10 +72,10 @@ class Simulation:
             if dist <= self.radius and x_l != 0 and y_l != 0:
                 moves = dist / self.colors_speed[par.color]
                 move = None
-                if dist <= 20:
+                if dist <= 15:
                     x_move = x_l / moves
                     y_move = y_l / moves
-                    move = (x_move - x_move * 2, y_move - y_move * 2)
+                    move = (x_move - x_move * 4, y_move - y_move * 4)
                 elif (par.color,particle.color) in self.attracts:
                     move = (x_l / moves, y_l / moves) #attracts
                 elif (par.color,particle.color) in self.repulses and dist <= self.radius /2:
@@ -86,16 +87,50 @@ class Simulation:
                 output.append(move)
         return output
 
+    def calculate_move2(self, par):
+        output = []
+        for particle in self.particles:
+            x_l = 0
+            if particle.x < par.x:  # particle po lewej
+                x_l = par.x - particle.x
+                x_l -= x_l * 2  # bo chcemy żeby szedł do "tyłu"
+            else:  # particle po prawej
+                x_l = particle.x - par.x
+            if particle.y > par.y:  # particle niżej
+                y_l = particle.y - par.y
+            else:  # particle wyżej
+                y_l = par.y - particle.y
+                y_l -= y_l * 2
+            dist = (x_l ** 2 + y_l ** 2) ** 0.5
+            if dist <= self.radius and x_l != 0 and y_l != 0:
+                move = None
+                force = self.rules[par.color][particle.color]
+                if force == 0: force = 0.001
+                moves = dist / force
+
+                if dist <= 15:
+                    x_move = x_l
+                    y_move = y_l
+                    move = (x_move - x_move * (20 - dist), y_move - y_move * (20 -dist))
+                elif dist <= self.radius /2:
+                    move = (x_l / moves, y_l / moves)  # attracts/repulse
+                elif force > 0:
+                    move = (x_l / moves, y_l / moves)  # attracts
+                else:
+                    move = (0,0)
+                output.append(move)
+        return output
+
     def handle_particles(self):
         for par in self.particles:
-            in_radius = self.calculate_move(par)
+            in_radius = self.calculate_move2(par)
             x_sum = 0
             y_sum = 0
-            for move in in_radius:
-                x_sum += move[0]
-                y_sum += move[1]
             if in_radius:
-                moves = [x_sum / len(in_radius), y_sum / len(in_radius)]
+                for move in in_radius:
+                    x_sum += move[0]
+                    y_sum += move[1]
+                moves = [x_sum / len(in_radius), y_sum / len(in_radius)] #avrage move
                 if 5 < par.x + moves[0] * self.sim_speed < self.S_WIDTH - 5:
                     par.x += moves[0] * self.sim_speed
                 else:
