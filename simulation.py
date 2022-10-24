@@ -2,9 +2,10 @@ import random
 import sys
 import pygame
 from particle import Particle
+import numpy as np
 
 class Simulation:
-    def __init__(self, num, colors,attracts, repulses,rules,radius, gravity = True):
+    def __init__(self, num, colors,attracts, repulses,rules,radius, gravity = False):
         pygame.init()
         pygame.display.set_caption("Particle Simulation")
 
@@ -25,6 +26,8 @@ class Simulation:
         self.attracts = attracts
         self.repulses = repulses
         self.rules = rules
+        self.gravity = gravity
+        self.expirmental = False
 
     def start(self):
         self.particles = []
@@ -33,7 +36,7 @@ class Simulation:
                 rnd_x = random.randint(5, self.S_WIDTH -5)
                 rnd_y = random.randint(5, self.S_HEIGHT-5)
 
-                tmp = Particle(color,rnd_x,rnd_y, self.colors_speed[color])
+                tmp = Particle(color,rnd_x,rnd_y, 1)
                 self.particles.append(tmp)
         self.main()
 
@@ -56,18 +59,8 @@ class Simulation:
     def calculate_move(self, par):
         output = []
         for particle in self.particles:
-            x_l = 0
-            if particle.x < par.x:  # particle po lewej
-                x_l = par.x - particle.x
-                x_l -= x_l * 2 #bo chcemy żeby szedł do "tyłu"
-            else:  # particle po prawej
-                x_l = particle.x - par.x
-
-            if particle.y > par.y: #particle niżej
-                y_l = particle.y - par.y
-            else: #particle wyżej
-                y_l =par.y - particle.y
-                y_l -= y_l *2
+            x_l = particle.x - par.x
+            y_l = particle.y - par.y
             dist = (x_l ** 2 + y_l ** 2) ** 0.5
             if dist <= self.radius and x_l != 0 and y_l != 0:
                 moves = dist / self.colors_speed[par.color]
@@ -86,22 +79,36 @@ class Simulation:
                     move = (0,0)
                 output.append(move)
         return output
+    def calculate_move1(self, par):
+        in_radius = self.check_radius(par) #0 = Particle() | 1 = force | 2 = distance
+        x_move = 0
+        y_move = 0
+        for particle in in_radius:
+            pass
+
+    def check_radius(self,par):
+        in_radius = []
+        for particle in self.particles:
+            x_l = particle.x - par.x
+            y_l = particle.y - par.y
+            if y_l > self.radius * 0.75 and x_l > self.radius * 0.75: continue
+            p1 = np.array(par.x, par.y)
+            p2 = np.array(particle.x, particle.y)
+            dist = np.linalg.norm(p2 - p1)
+            if dist > self.radius:
+                force = self.rules[par.color][particle.color]
+                response = [particle, force, dist]
+                in_radius.append(response)
+        return in_radius
 
     def calculate_move2(self, par):
         output = []
         for particle in self.particles:
-            x_l = 0
-            if particle.x < par.x:  # particle po lewej
-                x_l = par.x - particle.x
-                x_l -= x_l * 2  # bo chcemy żeby szedł do "tyłu"
-            else:  # particle po prawej
-                x_l = particle.x - par.x
-            if particle.y > par.y:  # particle niżej
-                y_l = particle.y - par.y
-            else:  # particle wyżej
-                y_l = par.y - particle.y
-                y_l -= y_l * 2
+            x_l = particle.x - par.x
+            y_l = particle.y - par.y
+            if y_l > self.radius * 0.75 and x_l > self.radius * 0.75: continue
             dist = (x_l ** 2 + y_l ** 2) ** 0.5
+
             if dist <= self.radius and x_l != 0 and y_l != 0:
                 move = None
                 force = self.rules[par.color][particle.color]
@@ -111,26 +118,40 @@ class Simulation:
                 if dist <= 15:
                     x_move = x_l
                     y_move = y_l
-                    move = (x_move - x_move * (20 - dist), y_move - y_move * (20 -dist))
-                elif dist <= self.radius /2:
-                    move = (x_l / moves, y_l / moves)  # attracts/repulse
+                    move = (x_move - x_move * 2, y_move - y_move * 2)
+                elif dist <= self.radius / 2 and force < 0:
+                    x_move = x_l / moves
+                    y_move = y_l / moves
+                    move = (x_move - x_move *2, y_move - y_move *2)  # repulse
                 elif force > 0:
                     move = (x_l / moves, y_l / moves)  # attracts
                 else:
-                    move = (0,0)
+                    move = (0, 0)
                 output.append(move)
         return output
 
+    def handle_gravitation(self):
+        for par in self.particles:
+            if 5 < par.y + par.yv < self.S_HEIGHT - 5:
+                par.y += par.yv
+            else:
+                par.yv -= (par.yv *2) * 0.75
+
+            par.yv += 0.03 * par.mass * self.sim_speed
+
     def handle_particles(self):
         for par in self.particles:
-            in_radius = self.calculate_move2(par)
+            if self.expirmental:
+                in_radius = self.calculate_move2(par)
+            else:
+                in_radius = self.calculate_move(par)
             x_sum = 0
             y_sum = 0
             if in_radius:
                 for move in in_radius:
                     x_sum += move[0]
                     y_sum += move[1]
-                moves = [x_sum / len(in_radius), y_sum / len(in_radius)] #avrage move
+                moves = [x_sum / len(in_radius), y_sum / len(in_radius)]  # avrage move
                 if 5 < par.x + moves[0] * self.sim_speed < self.S_WIDTH - 5:
                     par.x += moves[0] * self.sim_speed
                 else:
@@ -156,7 +177,9 @@ class Simulation:
         self.draw_text("2 - Change color", (255,0,0), 15,self.S_WIDTH + m_width / 2, 70, x_center= True)
         self.draw_text("3 - Start again", (255,0,0), 15,self.S_WIDTH + m_width / 2, 100, x_center= True)
         self.draw_text("4 - Sandbox", (255,0,0), 15,self.S_WIDTH + m_width / 2, 130, x_center= True)
-        self.draw_text("Arrows up/down simulation speed", (255,0,0), 15,self.S_WIDTH + m_width / 2, 160, x_center= True)
+        self.draw_text("5 - Gravity On/Off", (255,0,0), 15,self.S_WIDTH + m_width / 2, 160, x_center= True)
+        self.draw_text(f"6 - Experimental model {self.expirmental}", (255,0,0), 15,self.S_WIDTH + m_width / 2, 190, x_center= True)
+        self.draw_text("Arrows up/down simulation speed", (255,0,0), 15,self.S_WIDTH + m_width / 2, 220, x_center= True)
 
         pygame.display.update()
 
@@ -188,6 +211,10 @@ class Simulation:
                     if event.key == pygame.K_4:
                         self.WIN.fill((0,0,0))
                         self.particles = []
+                    if event.key == pygame.K_5:
+                        self.gravity = not self.gravity
+                    if event.key == pygame.K_6:
+                        self.expirmental = not self.expirmental
                     if event.key == pygame.K_UP:
                         self.sim_speed += 1
                         #speed up
@@ -197,9 +224,10 @@ class Simulation:
                         #i need to put a comment here so i can minimaze this if statment in IDE :)
                 if draw and event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.mouse.get_pos()
-                    tmp = Particle(color, mouse_pos[0], mouse_pos[1],self.colors_speed[color])
+                    tmp = Particle(color, mouse_pos[0], mouse_pos[1],10)
                     self.particles.append(tmp)
             self.handle_particles()
+            if self.gravity: self.handle_gravitation()
             self.draw()
 
 
