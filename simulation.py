@@ -2,7 +2,8 @@ import random
 import sys
 import pygame
 from particle import Particle
-import numpy as np
+from grid import Grid
+
 
 class Simulation:
     def __init__(self, num, colors,attracts, repulses,rules,radius, gravity = False):
@@ -10,9 +11,9 @@ class Simulation:
         pygame.display.set_caption("Particle Simulation")
 
         self.num = num #number of particles
-        self.S_WIDTH = 1000 #simulation width
+        self.S_WIDTH = 800 #simulation width
         self.S_HEIGHT = 800 #simulation height
-        self.WIDTH = 1300
+        self.WIDTH = 1100
         self.HEIGHT = 800
         self.FPS = 40
         self.sim_speed = 1
@@ -21,6 +22,7 @@ class Simulation:
         self.colors_speed = {"blue" : 10, "red" : 20, "green" : 30, "yellow":40, "purple":50}
         self.WIN = pygame.display.set_mode((self.WIDTH, self.HEIGHT))
         self.particles = []
+        self.grids = {}
         self.radius = radius
         self.colors = colors
         self.attracts = attracts
@@ -28,9 +30,14 @@ class Simulation:
         self.rules = rules
         self.gravity = gravity
         self.expirmental = False
+        self.grids = {}
+        self.G_SIDE = 100 #grid size
 
     def start(self):
+        #spawning particles
         self.particles = []
+        self.grids = {}
+
         for color in self.colors:
             for i in range(1,self.num+1):
                 rnd_x = random.randint(5, self.S_WIDTH -5)
@@ -38,7 +45,22 @@ class Simulation:
 
                 tmp = Particle(color,rnd_x,rnd_y, 1)
                 self.particles.append(tmp)
+
+        for i in range(self.S_WIDTH // self.G_SIDE):
+            for j in range(self.S_HEIGHT // self.G_SIDE):
+                grid = Grid([], (i * self.G_SIDE, j * self.G_SIDE))
+                self.grids[(i * self.G_SIDE, j * self.G_SIDE)] = grid
+
+        self.assign_par_to_grids()
         self.main()
+    def assign_par_to_grids(self):
+        for i in range(len(self.particles)):
+            par = self.particles[i]
+            grid_x = 0
+            grid_y = 0
+            if par.x >= 100: grid_x = int(str(par.x)[0]) * 100
+            if par.y >= 100: grid_y = int(str(par.y)[0]) * 100
+            self.grids[(grid_x, grid_y)].particles.append(par)
 
     def draw_text(self,content, color, size, x, y, x_center=False, y_center = False):
         font = pygame.font.SysFont("arialblack", size)
@@ -58,48 +80,29 @@ class Simulation:
 
     def calculate_move(self, par):
         output = []
-        for particle in self.particles:
-            x_l = particle.x - par.x
-            y_l = particle.y - par.y
-            dist = (x_l ** 2 + y_l ** 2) ** 0.5
-            if dist <= self.radius and x_l != 0 and y_l != 0:
-                moves = dist / self.colors_speed[par.color]
-                move = None
-                if dist <= 15:
-                    x_move = x_l / moves
-                    y_move = y_l / moves
-                    move = (x_move - x_move * 4, y_move - y_move * 4)
-                elif (par.color,particle.color) in self.attracts:
-                    move = (x_l / moves, y_l / moves) #attracts
-                elif (par.color,particle.color) in self.repulses and dist <= self.radius /2:
-                    x_move = x_l / moves
-                    y_move = y_l / moves
-                    move = (x_move - x_move *2,y_move - y_move*2)
-                else:
-                    move = (0,0)
-                output.append(move)
+        grids = self.check_radius(par)
+        for grid in grids:
+            for particle in grid.particles:
+                x_l = particle.x - par.x
+                y_l = particle.y - par.y
+                dist = (x_l ** 2 + y_l ** 2) ** 0.5
+                if dist <= self.radius and x_l != 0 and y_l != 0:
+                    moves = dist / self.colors_speed[par.color]
+                    move = None
+                    if dist <= 15:
+                        x_move = x_l * abs(dist - 15)
+                        y_move = y_l * abs(dist - 15)
+                        move = (x_move - x_move * 3, y_move - y_move * 3)
+                    elif (par.color,particle.color) in self.attracts:
+                        move = (x_l / moves, y_l / moves) #attracts
+                    elif (par.color,particle.color) in self.repulses and dist <= self.radius /2:
+                        x_move = x_l / moves
+                        y_move = y_l / moves
+                        move = (x_move - x_move *2,y_move - y_move*2)
+                    else:
+                        move = (0,0)
+                    output.append(move)
         return output
-    def calculate_move1(self, par):
-        in_radius = self.check_radius(par) #0 = Particle() | 1 = force | 2 = distance
-        x_move = 0
-        y_move = 0
-        for particle in in_radius:
-            pass
-
-    def check_radius(self,par):
-        in_radius = []
-        for particle in self.particles:
-            x_l = particle.x - par.x
-            y_l = particle.y - par.y
-            if y_l > self.radius * 0.75 and x_l > self.radius * 0.75: continue
-            p1 = np.array(par.x, par.y)
-            p2 = np.array(particle.x, particle.y)
-            dist = np.linalg.norm(p2 - p1)
-            if dist > self.radius:
-                force = self.rules[par.color][particle.color]
-                response = [particle, force, dist]
-                in_radius.append(response)
-        return in_radius
 
     def calculate_move2(self, par):
         output = []
@@ -130,14 +133,62 @@ class Simulation:
                 output.append(move)
         return output
 
-    def handle_gravitation(self):
-        for par in self.particles:
-            if 5 < par.y + par.yv < self.S_HEIGHT - 5:
-                par.y += par.yv
-            else:
-                par.yv -= (par.yv *2) * 0.75
+    def calculate_move1(self,par):
+        to_check= self.check_radius(par)
+        sum = 0
+        for grid in to_check:
+            sum += len(grid.particles)
+        print(sum )
+        return 0
 
-            par.yv += 0.03 * par.mass * self.sim_speed
+    def check_radius(self, par):
+        to_check = []
+        if par.x <= 100 and par.y <= 100: to_check.append(self.grids[(0, 0)])
+        elif par.x <= 100: to_check.append(self.grids[(0, int(str(par.y)[0]) * 100)])
+        elif par.y <= 100: to_check.append(self.grids[(int(str(par.x)[0]) * 100, 0)])
+        else: to_check.append(self.grids[(int(str(par.x)[0]) * 100, int(str(par.y)[0]) * 100)])
+        grids_to_side = self.radius // self.G_SIDE
+        for i in range(grids_to_side):  # x and y axis
+            x_left = int(float(str(par.x)[0])) * 100 - 100 * (i + 1)
+            x_right = int(float(str(par.x + 100 * (i + 1))[0])) * 100
+            y_bottom = int(float(str(par.y + (100 * (i + 1)))[0])) * 100
+            y_top = int(float(str(par.y)[0])) * 100 - 100 * (i + 1)
+            x_hundread = int(str(par.x)[0]) * 100 #first number from
+            y_hundread = int(str(par.y)[0]) * 100 #first number from
+            if par.x <= 99:
+                x_left = 0
+                x_hundread = 0
+            elif par.y <= 99:
+                y_top =0
+                y_hundread = 0
+
+            tmp_left = self.grids.get((x_left, y_hundread))
+            tmp_right = self.grids.get((x_right, y_hundread))
+            tmp_top = self.grids.get((x_hundread, y_top))
+            tmp_bottom = self.grids.get((x_hundread, y_bottom))
+            left_top = self.grids.get((x_left, y_top))
+            left_bottom = self.grids.get((x_left, y_bottom))
+            right_top = self.grids.get((x_right, y_bottom))
+            right_bottom = self.grids.get((x_right, y_bottom))
+
+            if tmp_left: to_check.append(tmp_left)
+            if tmp_right: to_check.append(tmp_right)
+            if tmp_top: to_check.append(tmp_top)
+            if tmp_bottom: to_check.append(tmp_bottom)
+            if left_bottom: to_check.append(left_bottom)
+            if left_top: to_check.append(left_top)
+            if right_bottom: to_check.append(right_bottom)
+            if right_top: to_check.append(right_top)
+        return to_check
+
+    def handle_particles1(self):
+        for par in self.particles:
+            in_radius = self.calculate_move1(par)
+            # x_move, y_move = in_radius
+            # if 5 < par.x + x_move * self.sim_speed < self.S_WIDTH - 5:
+            #     par.x += x_move * self.sim_speed
+            # if 5 < par.y + y_move * self.sim_speed < self.S_HEIGHT - 5:
+            #     par.y += y_move * self.sim_speed
 
     def handle_particles(self):
         for par in self.particles:
@@ -161,6 +212,14 @@ class Simulation:
                 else:
                     par.y += (moves[1] * self.sim_speed) - (moves[1] * self.sim_speed) * 2
 
+    def handle_gravitation(self):
+        for par in self.particles:
+            if 5 < par.y + par.yv < self.S_HEIGHT - 5:
+                par.y += par.yv
+            else:
+                par.yv -= (par.yv *2) * 0.75
+            par.yv += 0.03 * par.mass * self.sim_speed
+
     def draw(self):
         self.WIN.fill((0,0,0))
         #particles
@@ -168,7 +227,7 @@ class Simulation:
             pygame.draw.circle(self.WIN,self.rgb_colors[par.color], (par.x, par.y), 4)
 
         #menu
-        m_width = self.WIDTH - self.S_WIDTH
+        m_width = self.WIDTH - self.S_WIDTH #menu width
         menu_bg = pygame.Rect(self.S_WIDTH, 0, m_width, self.HEIGHT)
         pygame.draw.rect(self.WIN, (200,200,200), menu_bg)
         self.draw_text(f"Simulation speed: {self.sim_speed} | Particles: {len(self.particles)}",
