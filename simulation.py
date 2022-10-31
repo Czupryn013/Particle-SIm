@@ -58,6 +58,8 @@ class Simulation:
             par = self.particles[i]
             grid_x = 0
             grid_y = 0
+            if par.x == self.S_WIDTH: grid_x = 799 #so x won’t go to 800, cause last grid is starts at 700, same with y
+            if par.y == self.S_HEIGHT: grid_x = 799
             if par.x >= 100: grid_x = int(str(par.x)[0]) * 100
             if par.y >= 100: grid_y = int(str(par.y)[0]) * 100
             self.grids[(grid_x, grid_y)].particles.append(par)
@@ -106,31 +108,33 @@ class Simulation:
 
     def calculate_move2(self, par):
         output = []
-        for particle in self.particles:
-            x_l = particle.x - par.x
-            y_l = particle.y - par.y
-            if y_l > self.radius * 0.75 and x_l > self.radius * 0.75: continue
-            dist = (x_l ** 2 + y_l ** 2) ** 0.5
+        grids = self.check_radius(par)
+        for grid in grids:
+            for particle in grid.particles:
+                x_l = particle.x - par.x
+                y_l = particle.y - par.y
+                if y_l > self.radius * 0.75 and x_l > self.radius * 0.75: continue
+                dist = (x_l ** 2 + y_l ** 2) ** 0.5
 
-            if dist <= self.radius and x_l != 0 and y_l != 0:
-                move = None
-                force = self.rules[par.color][particle.color]
-                if force == 0: force = 0.001
-                moves = dist / force
+                if dist <= self.radius and x_l != 0 and y_l != 0:
+                    move = None
+                    force = self.rules[par.color][particle.color]
+                    if force == 0: force = 0.001
+                    moves = dist / force
 
-                if dist <= 15:
-                    x_move = x_l
-                    y_move = y_l
-                    move = (x_move - x_move * 2, y_move - y_move * 2)
-                elif dist <= self.radius / 2 and force < 0:
-                    x_move = x_l / moves
-                    y_move = y_l / moves
-                    move = (x_move - x_move *2, y_move - y_move *2)  # repulse
-                elif force > 0:
-                    move = (x_l / moves, y_l / moves)  # attracts
-                else:
-                    move = (0, 0)
-                output.append(move)
+                    if dist <= 15:
+                        x_move = x_l
+                        y_move = y_l
+                        move = (x_move - x_move * 2, y_move - y_move * 2)
+                    elif dist <= self.radius / 2 and force < 0:
+                        x_move = x_l / moves
+                        y_move = y_l / moves
+                        move = (x_move - x_move *2, y_move - y_move *2)  # repulse
+                    elif force > 0:
+                        move = (x_l / moves, y_l / moves)  # attracts
+                    else:
+                        move = (0, 0)
+                    output.append(move)
         return output
 
     def calculate_move1(self,par):
@@ -143,10 +147,16 @@ class Simulation:
 
     def check_radius(self, par):
         to_check = []
+        in_radius = []
+        if (par.x < 0 or par.x > self.S_WIDTH) or (par.y < 0 or par.y > self.S_HEIGHT):
+            self.particles.remove(par)
+            return []
         if par.x <= 100 and par.y <= 100: to_check.append(self.grids[(0, 0)])
         elif par.x <= 100: to_check.append(self.grids[(0, int(str(par.y)[0]) * 100)])
         elif par.y <= 100: to_check.append(self.grids[(int(str(par.x)[0]) * 100, 0)])
         else: to_check.append(self.grids[(int(str(par.x)[0]) * 100, int(str(par.y)[0]) * 100)])
+
+
         grids_to_side = self.radius // self.G_SIDE
         for i in range(grids_to_side):  # x and y axis
             x_left = int(float(str(par.x)[0])) * 100 - 100 * (i + 1)
@@ -284,7 +294,18 @@ class Simulation:
                 if draw and event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.mouse.get_pos()
                     tmp = Particle(color, mouse_pos[0], mouse_pos[1],10)
-                    self.particles.append(tmp)
+                    grid_x = 0
+                    grid_y = 0
+                    valid = True
+                    if tmp.x >= self.S_WIDTH or tmp.x < 0: valid = False #there isnt grid with x 800 so we need to make it 799
+                    elif tmp.x >= 100: grid_x = int(str(tmp.x)[0]) * 100
+
+                    if tmp.y >= self.S_HEIGHT or tmp.y < 0: valid = False
+                    elif tmp.y >= 100: grid_y = int(str(tmp.y)[0]) * 100
+                    if valid:
+                        self.grids.get((grid_x, grid_y)).particles.append(tmp)
+                        self.particles.append(tmp)
+
             self.handle_particles()
             if self.gravity: self.handle_gravitation()
             self.draw()
